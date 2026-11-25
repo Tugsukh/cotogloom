@@ -30,7 +30,7 @@ README.md
 
 ## Phases
 - [x] 1. Server + lobby + players walking in a test room, synced (bots: join, ready, host start)
-- [ ] 2. Full map, collision, stairs, crouch-under-table, lighting (screenshots)
+- [x] 2. Full map, collision, stairs, crouch-under-table, lighting (screenshots)
 - [ ] 3. Roles, hiding/seeking, catching, timer, win/results, play again (bots: catch LOS/range, win logic)
 - [ ] 4. Task stations, 6 tasks, exit door (bots: every task rejects wrong / accepts right; escape gating)
 - [ ] 5. Sound, HUD polish, spectator mode, disconnect handling
