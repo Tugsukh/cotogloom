@@ -50,6 +50,7 @@ export class Bot {
     this.s.on('round', (r) => { this.round = r; });
     this.s.on('you', (y) => { this.you = y; });
     this.s.on('results', (r) => { this.results = r; });
+    this.s.on('round', (r) => { if (r.phase !== 'ended') this.results = null; });
     this.s.on('event', (e) => this.events.push(e));
     this.s.on('teleport', (d) => { this.seq = d.seq; this.pos = [...d.pos]; });
     this.s.on('correct', (d) => { this.seq = d.seq; this.pos = [...d.pos]; this.corrections++; });
@@ -266,8 +267,152 @@ async function phase2() {
   await sleep(300);
 }
 
+// ================================================================== PHASE 3
+async function startRoundWith(bots, seekerBot, extra = {}) {
+  const [host] = bots;
+  host.emit('settings', { seekerMode: 'chosen', seekerId: seekerBot.id, hideTime: 5, roundTime: 120, ...extra });
+  await sleep(100);
+  for (const b of bots) b.emit('ready', true);
+  await sleep(150);
+  const w = seekerBot.waitFor('round', (r) => r.phase === 'hiding');
+  const r = await host.ack('start');
+  await w;
+  await sleep(100);
+  return r;
+}
+
+async function toSeeking(bot) {
+  const w = bot.waitFor('round', (r) => r.phase === 'seeking');
+  bot.emit('debug:setTime', { seconds: 0 });
+  return w;
+}
+
+async function phase3() {
+  console.log('\nPhase 3 — roles, hiding/seeking, catching, win logic, play again');
+  const [a, b, c] = await makeBots(3);
+  await a.join(); await b.join(); await c.join();
+  const r = await startRoundWith([a, b, c], a);
+  check(r.ok && a.round.seekerId === a.id, 'host-chosen seeker is used');
+
+  // hiding: seeker frozen, can't catch
+  const c0 = a.corrections;
+  a.move(a.pos[0] + 0.3, a.pos[1], a.pos[2]);
+  await sleep(150);
+  check(a.corrections > c0, 'seeker cannot move during the hiding phase');
+  const early = await a.ack('catch', { yaw: 0 });
+  check(!early.ok, 'seeker cannot catch during the hiding phase');
+  const hb0 = b.corrections;
+  await b.walkTo(b.pos[0] + 0.8, b.pos[2]);
+  check(b.corrections === hb0, 'hiders can move during the hiding phase');
+
+  const sk = await toSeeking(a);
+  check(sk && a.round.phase === 'seeking', 'hiding phase ends, seeking begins');
+  await sleep(120);
+  check(a.snap.timeLeft > 100, `round timer runs (${a.snap?.timeLeft}s left)`);
+
+  // out of range
+  await a.teleport(20, 0, 15, 0);
+  await b.teleport(20, 0, 13.0, 0);
+  await sleep(1000);  // let the catch cooldown pass
+  let res = await a.ack('catch', { yaw: 0 });
+  check(!res.ok, 'catch fails out of range (1.7 m)');
+  // facing away
+  await b.teleport(20, 0, 13.9, 0);
+  await sleep(700);
+  res = await a.ack('catch', { yaw: Math.PI });
+  check(!res.ok, 'catch fails when the seeker faces away');
+  // wall between (office vs corridor), in range and facing
+  await a.teleport(9.5, 0, 3, -Math.PI / 2);
+  await b.teleport(10.55, 0, 3, 0);
+  await sleep(700);
+  res = await a.ack('catch', { yaw: -Math.PI / 2 });
+  check(!res.ok, 'catch fails without line of sight (through a wall)');
+  // hider crouched under a desk, standing seeker looking from above: table top blocks the view
+  await a.teleport(5, 0, 8.5, 0);
+  await b.teleport(5, 0, 7.5, 0, true);
+  await sleep(700);
+  res = await a.ack('catch', { yaw: 0 });
+  check(!res.ok, 'standing seeker cannot catch a hider hidden under a desk');
+  await a.teleport(5, 0, 8.5, 0, true);  // seeker crouches down
+  await sleep(700);
+  const caughtEv = c.waitFor('event', (e) => e.kind === 'caught');
+  res = await a.ack('catch', { yaw: 0 });
+  check(res.ok && res.id === b.id, 'crouched seeker catches the hider under the desk (in range, LOS, facing)');
+  const ev = await caughtEv;
+  check(ev && ev.hiderName === 'Bob' && ev.seekerName === 'Alice', 'everyone is told who was caught by whom');
+  res = await a.ack('catch', { yaw: 0 });
+  check(!res.ok, 'catch has a cooldown / caught players cannot be caught again');
+  await sleep(100);
+  check(a.phase !== 'ended' && !a.results, 'round continues while enough hiders could still escape');
+  check(c.lobby.players.find((p) => p.id === b.id).status === 'caught', 'caught hider becomes a spectator');
+  // caught player can't move anymore
+  const bc = b.corrections;
+  b.move(b.pos[0] + 0.3, b.pos[1], b.pos[2]);
+  await sleep(150);
+  check(b.corrections > bc, 'caught players cannot move');
+
+  // catch the last hider -> seeker wins
+  await a.teleport(20, 0, 15, 0);
+  await c.teleport(20, 0, 14.0, 0);
+  await sleep(700);
+  const resW = a.waitFor('results');
+  res = await a.ack('catch', { yaw: 0 });
+  const results = await resW;
+  check(res.ok && results && results.winner === 'seeker', `seeker wins when all hiders are caught (${results?.reason})`);
+  const rb = results?.players.find((p) => p.id === b.id);
+  check(rb && rb.status === 'caught' && rb.caughtBy === 'Alice', 'results list who was caught and by whom');
+  check(typeof results?.roundTime === 'number', 'results include the round time');
+
+  // play again: seeker rotates to the next player
+  b.emit('playAgain'); await sleep(150);
+  check(a.results && a.round.seekerId === a.id, 'non-host cannot press play again');
+  const nr = b.waitFor('round', (x) => x.phase === 'hiding');
+  a.emit('playAgain');
+  const round2 = await nr;
+  check(round2 && round2.seekerId === b.id, 'play again rotates the seeker to the next player');
+
+  // timer runs out -> seeker wins
+  await toSeeking(a);
+  const tW = a.waitFor('results');
+  a.emit('debug:setTime', { seconds: 0 });
+  const tr = await tW;
+  check(tr && tr.winner === 'seeker' && /time/i.test(tr.reason), 'seeker wins when the timer runs out');
+
+  // hider disconnect re-checks the win condition
+  const nr3 = c.waitFor('round', (x) => x.phase === 'hiding');
+  a.emit('playAgain');
+  const round3 = await nr3;
+  check(round3?.seekerId === c.id, 'seeker rotates again (Cara)');
+  await toSeeking(a);
+  await c.teleport(20, 0, 15, 0); await a.teleport(20, 0, 14.0, 0);
+  await sleep(700);
+  res = await c.ack('catch', { yaw: 0 });
+  check(res.ok, 'Cara catches Alice');
+  await sleep(100);
+  check(!c.results, 'one hider still alive: round continues');
+  const dW = c.waitFor('results');
+  b.close();
+  const dr = await dW;
+  check(dr && dr.winner === 'seeker', `hider leaving re-checks the win condition (${dr?.reason})`);
+  check(dr?.players.some((p) => p.name === 'Bob' && p.status === 'left'), 'results show who left');
+
+  // seeker leaves -> round ends
+  const nr4 = c.waitFor('round', (x) => x.phase === 'hiding');
+  a.emit('playAgain');
+  const round4 = await nr4;
+  check(round4?.seekerId === a.id, 'seeker rotates back to Alice');
+  const sW = c.waitFor('results');
+  a.close();
+  const sr = await sW;
+  check(sr && sr.reason === 'Seeker left', 'round ends when the seeker leaves ("Seeker left")');
+  await sleep(150);
+  check(c.lobby.hostId === c.id, 'host passes on to the remaining player');
+  c.close();
+  await sleep(300);
+}
+
 // ------------------------------------------------------------------ run
-const PHASES = { 1: phase1, 2: phase2 };
+const PHASES = { 1: phase1, 2: phase2, 3: phase3 };
 const pick = process.argv.slice(2).map(Number).filter((n) => PHASES[n]);
 (async () => {
   try {

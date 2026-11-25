@@ -1,7 +1,7 @@
 // Authoritative game state. One lobby per server.
 import { CONFIG, bodyHeight, eyeHeight } from '../shared/config.js';
 import { MAP } from '../shared/map.js';
-import { moveBody, overlapsAny, groundHeight } from '../shared/collision.js';
+import { moveBody, overlapsAny, groundHeight, lineOfSight, distToBody } from '../shared/collision.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -30,6 +30,9 @@ export class Game {
     socket.on('settings', (s) => this.onSettings(socket, s));
     socket.on('start', (ack) => this.onStart(socket, ack));
     socket.on('move', (d) => this.onMove(socket, d));
+    socket.on('catch', (d, ack) => this.onCatch(socket, d, ack));
+    socket.on('playAgain', () => this.onPlayAgain(socket));
+    socket.on('backToLobby', () => this.onBackToLobby(socket));
     socket.on('disconnect', () => this.onLeave(socket));
     if (this.testMode) this.attachDebug(socket);
   }
@@ -42,6 +45,8 @@ export class Game {
       if (typeof d.yaw === 'number') p.yaw = d.yaw;
     });
     socket.on('debug:state', (ack) => typeof ack === 'function' && ack(this.debugState()));
+    // shorten the current phase to `seconds`
+    socket.on('debug:setTime', (d) => { if (this.round) this.round.phaseEndsAt = Date.now() + (+d.seconds || 0) * 1000; });
   }
 
   debugState() {
@@ -146,6 +151,9 @@ export class Game {
       seekStartedAt: null,
       hiderIds: [],
       tasksNeeded: this.settings.tasksNeeded,
+      departed: [],   // players who left mid-round (for the results screen)
+      catches: 0,
+      over: false,
     };
     let i = 0;
     for (const id of this.order) {
@@ -261,6 +269,124 @@ export class Game {
 
   afterMove(_p) { /* phase 4: escape check */ }
 
+  // ------------------------------------------------------------------ catching
+  /** Server-side catch check: range, line of sight and facing. Returns the caught hider or null. */
+  findCatchTarget(seeker, yaw) {
+    const eye = [seeker.pos[0], seeker.pos[1] + eyeHeight(seeker.crouch), seeker.pos[2]];
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+    let best = null, bestD = Infinity;
+    for (const h of this.players.values()) {
+      if (h.role !== 'hider' || h.status !== 'alive') continue;
+      const hh = bodyHeight(h.crouch);
+      const d = distToBody(eye, h.pos[0], h.pos[1], h.pos[2], hh);
+      if (d > CONFIG.CATCH_DISTANCE) continue;
+      // facing (horizontal): hider must be in front of the seeker
+      const vx = h.pos[0] - seeker.pos[0], vz = h.pos[2] - seeker.pos[2];
+      const hl = Math.hypot(vx, vz);
+      if (hl > CONFIG.PLAYER_RADIUS && (vx * fx + vz * fz) / hl < CONFIG.CATCH_FACING_DOT) continue;
+      // line of sight to the body centre or the head
+      const targets = [[h.pos[0], h.pos[1] + hh * 0.5, h.pos[2]], [h.pos[0], h.pos[1] + hh - 0.1, h.pos[2]]];
+      if (!targets.some((t) => lineOfSight(eye, t, MAP.boxes))) continue;
+      if (d < bestD) { bestD = d; best = h; }
+    }
+    return best;
+  }
+
+  onCatch(socket, d = {}, ack) {
+    const reply = (r) => typeof ack === 'function' && ack(r);
+    const s = this.players.get(socket.id);
+    if (!s || this.phase !== 'seeking' || s.role !== 'seeker' || s.status !== 'alive') return reply({ ok: false, error: 'not allowed' });
+    const now = Date.now();
+    if (now - s.lastCatchAt < CONFIG.CATCH_COOLDOWN_MS) return reply({ ok: false, error: 'cooldown' });
+    s.lastCatchAt = now;
+    const yaw = Number.isFinite(+d.yaw) ? +d.yaw : s.yaw;
+    const h = this.findCatchTarget(s, yaw);
+    if (!h) return reply({ ok: false, error: 'miss' });
+    h.status = 'caught';
+    h.caughtBy = s.name;
+    h.outcomeAt = this.elapsed();
+    h.activeTask = null;
+    this.round.catches++;
+    reply({ ok: true, id: h.id, name: h.name });
+    this.io.emit('event', { kind: 'caught', hiderId: h.id, hiderName: h.name, seekerId: s.id, seekerName: s.name });
+    this.broadcastLobby();
+    this.checkWin();
+  }
+
+  /** Seconds since the seeking phase started (0 during hiding). */
+  elapsed() {
+    if (!this.round?.seekStartedAt) return 0;
+    return Math.round((Date.now() - this.round.seekStartedAt) / 1000);
+  }
+
+  // ------------------------------------------------------------------ win conditions
+  hiderCounts() {
+    let total = 0, escaped = 0, caught = 0, alive = 0;
+    for (const id of this.round?.hiderIds ?? []) {
+      const p = this.players.get(id);
+      if (!p) continue;      // left the game: no longer counts
+      total++;
+      if (p.status === 'escaped') escaped++;
+      else if (p.status === 'caught') caught++;
+      else if (p.status === 'alive') alive++;
+    }
+    return { total, escaped, caught, alive, needed: Math.ceil(total / 2) };
+  }
+
+  /** Hiders win if at least half of them escape; the seeker wins when that becomes impossible or time runs out. */
+  checkWin() {
+    if (!this.round || this.round.over || (this.phase !== 'hiding' && this.phase !== 'seeking')) return;
+    const c = this.hiderCounts();
+    if (c.total === 0) return this.endRound('seeker', 'No hiders left');
+    if (c.escaped >= c.needed) return this.endRound('hiders', `${c.escaped} of ${c.total} hiders escaped`);
+    if (c.escaped + c.alive < c.needed) {
+      return this.endRound('seeker', c.alive === 0 ? 'Every hider was caught' : 'Not enough hiders can escape anymore');
+    }
+  }
+
+  endRound(winner, reason) {
+    if (!this.round || this.round.over) return;
+    this.round.over = true;
+    this.phase = 'ended';
+    const roundTime = this.round.seekStartedAt ? (Date.now() - this.round.seekStartedAt) / 1000 : 0;
+    const players = [];
+    for (const id of this.order) {
+      const p = this.players.get(id);
+      if (!p.role) continue; // spectators who joined mid-round
+      players.push({
+        id, name: p.name, color: p.color, role: p.role, status: p.status,
+        caughtBy: p.caughtBy, at: p.outcomeAt, tasks: p.tasksDone.size,
+        catches: p.role === 'seeker' ? this.round.catches : undefined,
+      });
+    }
+    players.push(...this.round.departed);
+    for (const p of this.players.values()) { p.activeTask = null; p.ready = false; }
+    this.results = { winner, reason, roundTime, players, seekerId: this.round.seekerId };
+    this.io.emit('results', this.results);
+    this.broadcastLobby();
+  }
+
+  /** Host: start the next round right away; the seeker rotates to the next player in join order. */
+  onPlayAgain(socket) {
+    if (socket.id !== this.hostId || this.phase !== 'ended') return;
+    if (this.players.size < CONFIG.MIN_PLAYERS) {
+      this.resetToLobby(); this.broadcastLobby();
+      socket.emit('event', { kind: 'info', text: 'Need at least 2 players — back to the lobby' });
+      return;
+    }
+    const i = this.order.indexOf(this.lastSeekerId);
+    const next = this.order[(i + 1) % this.order.length]; // i === -1 (seeker left) -> first player
+    this.startRound(next);
+  }
+
+  onBackToLobby(socket) {
+    if (socket.id !== this.hostId || this.phase !== 'ended') return;
+    this.resetToLobby();
+    let k = 0;
+    for (const id of this.order) this.teleport(this.players.get(id), MAP.lobbySpawns[k++ % MAP.lobbySpawns.length], 0);
+    this.broadcastLobby();
+  }
+
   // ------------------------------------------------------------------ leaving
   onLeave(socket) {
     const p = this.players.get(socket.id);
@@ -269,13 +395,19 @@ export class Game {
     this.order = this.order.filter((id) => id !== socket.id);
     if (this.settings.seekerId === socket.id) this.settings.seekerId = null;
     this.io.emit('left', { id: socket.id, name: p.name });
-    if (this.players.size === 0) this.resetToLobby();
+    if (this.players.size === 0) { this.resetToLobby(); return; }
+    if (this.round && !this.round.over && (this.phase === 'hiding' || this.phase === 'seeking') && p.role) {
+      this.round.departed.push({ id: p.id, name: p.name, color: p.color, role: p.role, status: 'left', tasks: p.tasksDone.size });
+      if (p.role === 'seeker') this.endRound('hiders', 'Seeker left');
+      else this.checkWin();
+    }
     this.broadcastLobby();
   }
 
   resetToLobby() {
     this.phase = 'lobby';
     this.round = null;
+    this.results = null;
     for (const p of this.players.values()) {
       p.role = null; p.status = 'lobby'; p.ready = false; p.activeTask = null;
     }
@@ -288,6 +420,9 @@ export class Game {
       this.round.seekStartedAt = Date.now();
       this.round.phaseEndsAt = Date.now() + this.settings.roundTime * 1000;
       for (const p of this.players.values()) this.sendRound(p);
+    }
+    if (this.round && this.phase === 'seeking' && Date.now() >= this.round.phaseEndsAt) {
+      this.endRound('seeker', 'Time ran out');
     }
     if (this.players.size === 0) return;
     const snap = {

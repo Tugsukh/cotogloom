@@ -27,7 +27,7 @@ export class RemotePlayers {
     coneGeo.translate(0, -coneLen / 2, 0);  // apex at origin, opening towards -Y
     coneGeo.rotateX(-Math.PI / 2);          // opening towards -Z (forward)
     this.cone = new THREE.Mesh(coneGeo, new THREE.MeshBasicMaterial({
-      color: '#fff1c4', transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending,
+      color: '#fff1c4', transparent: true, opacity: 0.11, blending: THREE.AdditiveBlending,
       depthWrite: false, side: THREE.DoubleSide,
     }));
     this.cone.visible = false;
