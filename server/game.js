@@ -1,6 +1,7 @@
 // Authoritative game state. One lobby per server.
 import { CONFIG, bodyHeight, eyeHeight } from '../shared/config.js';
 import { MAP } from '../shared/map.js';
+import { TASKS, rollStationTasks, randomCode } from './tasks.js';
 import { moveBody, overlapsAny, groundHeight, lineOfSight, distToBody } from '../shared/collision.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -33,6 +34,9 @@ export class Game {
     socket.on('catch', (d, ack) => this.onCatch(socket, d, ack));
     socket.on('playAgain', () => this.onPlayAgain(socket));
     socket.on('backToLobby', () => this.onBackToLobby(socket));
+    socket.on('task:open', (d, ack) => this.onTaskOpen(socket, d, ack));
+    socket.on('task:submit', (d, ack) => this.onTaskSubmit(socket, d, ack));
+    socket.on('task:close', () => { const p = this.players.get(socket.id); if (p) p.activeTask = null; });
     socket.on('disconnect', () => this.onLeave(socket));
     if (this.testMode) this.attachDebug(socket);
   }
@@ -45,6 +49,15 @@ export class Game {
       if (typeof d.yaw === 'number') p.yaw = d.yaw;
     });
     socket.on('debug:state', (ack) => typeof ack === 'function' && ack(this.debugState()));
+    // force station task types (in station order, cycling) so tests can reach every type
+    socket.on('debug:forceTypes', (d) => {
+      if (!this.round || !Array.isArray(d?.types)) return;
+      this.round.stations.forEach((st, i) => {
+        st.type = d.types[i % d.types.length];
+        st.code = st.type === 'codelock' ? randomCode() : null;
+      });
+      for (const p of this.players.values()) this.sendRound(p);
+    });
     // shorten the current phase to `seconds`
     socket.on('debug:setTime', (d) => { if (this.round) this.round.phaseEndsAt = Date.now() + (+d.seconds || 0) * 1000; });
   }
@@ -152,6 +165,7 @@ export class Game {
       hiderIds: [],
       tasksNeeded: this.settings.tasksNeeded,
       departed: [],   // players who left mid-round (for the results screen)
+      stations: rollStationTasks(MAP.stations),
       catches: 0,
       over: false,
     };
@@ -170,7 +184,7 @@ export class Game {
         this.teleport(p, MAP.spawns[i++ % MAP.spawns.length], 0);
       }
     }
-    for (const p of this.players.values()) this.sendRound(p);
+    for (const p of this.players.values()) { this.sendRound(p); this.sendYou(p); }
     this.broadcastLobby();
   }
 
@@ -180,7 +194,52 @@ export class Game {
       seekerId: this.round?.seekerId ?? null,
       tasksNeeded: this.round?.tasksNeeded ?? this.settings.tasksNeeded,
       settings: this.settings,
+      // codes are public: they are painted on signs in the 3D world
+      stations: (this.round?.stations ?? []).map((s) => ({ id: s.id, type: s.type, code: s.code })),
     };
+  }
+
+  sendYou(p) {
+    const needed = this.round?.tasksNeeded ?? this.settings.tasksNeeded;
+    p.socket.emit('you', { tasksDone: [...p.tasksDone], needed, unlocked: p.role === 'hider' && p.tasksDone.size >= needed });
+  }
+
+  // ------------------------------------------------------------------ tasks
+  stationInReach(p, def) {
+    return Math.hypot(p.pos[0] - def.pos[0], p.pos[2] - def.pos[2]) <= CONFIG.TASK_DISTANCE && Math.abs(p.pos[1] - def.pos[1]) < 1.0;
+  }
+
+  onTaskOpen(socket, d = {}, ack) {
+    const reply = (r) => typeof ack === 'function' && ack(r);
+    const p = this.players.get(socket.id);
+    if (!p || !this.round || (this.phase !== 'hiding' && this.phase !== 'seeking')) return reply({ ok: false, error: 'No round running' });
+    if (p.role !== 'hider' || p.status !== 'alive') return reply({ ok: false, error: 'Only hiders do tasks' });
+    const def = MAP.stations.find((s) => s.id === d.stationId);
+    const st = this.round.stations.find((s) => s.id === d.stationId);
+    if (!def || !st) return reply({ ok: false, error: 'No such station' });
+    if (p.tasksDone.has(st.id)) return reply({ ok: false, error: 'Already done' });
+    if (!this.stationInReach(p, def)) return reply({ ok: false, error: 'Too far from the station' });
+    const t = TASKS[st.type].create({ station: st });
+    p.activeTask = { stationId: st.id, type: st.type, data: t.data, secret: t.secret };
+    reply({ ok: true, type: st.type, data: t.data });
+  }
+
+  onTaskSubmit(socket, d = {}, ack) {
+    const reply = (r) => typeof ack === 'function' && ack(r);
+    const p = this.players.get(socket.id);
+    const task = p?.activeTask;
+    if (!task || p.status !== 'alive' || (this.phase !== 'hiding' && this.phase !== 'seeking')) return reply({ result: 'error', message: 'No task open' });
+    const st = this.round.stations.find((s) => s.id === task.stationId);
+    const def = MAP.stations.find((s) => s.id === task.stationId);
+    if (!this.stationInReach(p, def)) { p.activeTask = null; return reply({ result: 'error', message: 'Too far from the station' }); }
+    const r = TASKS[task.type].check(task, d.answer, { station: st });
+    if (r.result === 'complete') {
+      p.tasksDone.add(task.stationId);
+      p.activeTask = null;
+      this.sendYou(p);
+      this.broadcastLobby();
+    }
+    reply(r);
   }
 
   sendRound(p) { p.socket.emit('round', this.roundInfo()); }
@@ -267,7 +326,19 @@ export class Game {
     this.afterMove(p);
   }
 
-  afterMove(_p) { /* phase 4: escape check */ }
+  /** Escape: a hider with enough tasks done walks into the exit door. */
+  afterMove(p) {
+    if (!this.round || (this.phase !== 'hiding' && this.phase !== 'seeking')) return;
+    if (p.role !== 'hider' || p.status !== 'alive' || p.tasksDone.size < this.round.tasksNeeded) return;
+    const ex = MAP.exit.pos;
+    if (Math.hypot(p.pos[0] - ex[0], p.pos[2] - ex[2]) > CONFIG.EXIT_DISTANCE || p.pos[1] > ex[1] + 1) return;
+    p.status = 'escaped';
+    p.outcomeAt = this.elapsed();
+    p.activeTask = null;
+    this.io.emit('event', { kind: 'escaped', id: p.id, name: p.name });
+    this.broadcastLobby();
+    this.checkWin();
+  }
 
   // ------------------------------------------------------------------ catching
   /** Server-side catch check: range, line of sight and facing. Returns the caught hider or null. */

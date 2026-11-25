@@ -160,7 +160,7 @@ export function buildWorld(scene) {
     // Sign for the code-lock task (texture set per round)
     let sign = null;
     if (st.sign) {
-      sign = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.56), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.8 }));
+      sign = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.56), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.8, emissive: '#ffffff', emissiveIntensity: 0.45 }));
       sign.position.set(...st.sign.pos);
       sign.rotation.y = st.sign.rotY ?? 0;
       sign.visible = false;
@@ -203,6 +203,7 @@ export function buildWorld(scene) {
         if (rs.type === 'codelock' && rs.code) {
           s.sign.material.map?.dispose();
           s.sign.material.map = codeSignTexture(rs.code);
+          s.sign.material.emissiveMap = s.sign.material.map;
           s.sign.material.needsUpdate = true;
           s.sign.visible = true;
         }

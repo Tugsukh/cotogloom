@@ -8,6 +8,8 @@ import { fileURLToPath } from 'url';
 import { CONFIG } from '../shared/config.js';
 import { MAP } from '../shared/map.js';
 import { moveBody, canStand, lineOfSight } from '../shared/collision.js';
+import fs from 'fs';
+const QUESTIONS = JSON.parse(fs.readFileSync(new globalThis.URL('../client/tasks/questions.json', import.meta.url), 'utf8'));
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 3900 + Math.floor(Math.random() * 90);
@@ -411,8 +413,154 @@ async function phase3() {
   await sleep(300);
 }
 
+// ================================================================== PHASE 4
+function freeSpotNear(st) {
+  for (const [dx, dz] of [[0.8, 0], [-0.8, 0], [0, 0.8], [0, -0.8], [0.7, 0.7], [-0.7, -0.7], [0.7, -0.7], [-0.7, 0.7]]) {
+    if (canStand(st.pos[0] + dx, st.pos[1] + 0.01, st.pos[2] + dz, MAP.boxes)) return [st.pos[0] + dx, st.pos[1], st.pos[2] + dz];
+  }
+  return null;
+}
+
+/** Compute a correct answer from the challenge data (what a human would do by looking). */
+function solve(type, data, station) {
+  switch (type) {
+    case 'wires': return data.left.map((c) => data.right.indexOf(c));
+    case 'simon': return data.sequence;
+    case 'key': return data.options.findIndex((k) => JSON.stringify(k) === JSON.stringify(data.target));
+    case 'math': {
+      const m = data.question.match(/(\d+) (.) (\d+)/);
+      const a = +m[1], b = +m[3];
+      return { '+': a + b, '−': a - b, '×': a * b, '÷': a / b }[m[2]];
+    }
+    case 'trivia': {
+      const q = QUESTIONS.find((x) => x.q === data.question);
+      return data.choices.indexOf(q.choices[q.answer]);
+    }
+    case 'codelock': return station.code;
+  }
+}
+function wrong(type, data, station) {
+  switch (type) {
+    case 'wires': { const r = solve(type, data); return [r[1], r[0], r[2], r[3]]; }
+    case 'simon': return data.sequence.map((v) => (v + 1) % 4);
+    case 'key': return (solve(type, data) + 1) % 6;
+    case 'math': return solve(type, data) + 1;
+    case 'trivia': return (solve(type, data) + 1) % data.choices.length;
+    case 'codelock': return station.code === '0000' ? '1111' : '0000';
+  }
+}
+
+async function phase4() {
+  console.log('\nPhase 4 — task stations, 6 task types, exit door');
+  const [a, b] = await makeBots(2);
+  await a.join(); await b.join();
+  const TYPES = ['wires', 'simon', 'key', 'math', 'trivia', 'codelock'];
+  await startRoundWith([a, b], b, { tasksNeeded: 6 });
+  check(a.round.stations.length === MAP.stations.length && a.round.stations.every((s) => TYPES.includes(s.type)), 'every station got a random task type');
+  const cl = a.round.stations.filter((s) => s.type === 'codelock');
+  check(cl.every((s) => /^\d{4}$/.test(s.code)), 'code-lock stations have a 4-digit code (painted on their sign)');
+  const rw = a.waitFor('round');
+  a.emit('debug:forceTypes', { types: TYPES });
+  await rw;
+  check(TYPES.every((t, i) => a.round.stations[i].type === t), 'test hook assigned all 6 types to stations 1-6');
+
+  // seeker can't do tasks; too far fails
+  const st1 = MAP.stations[0];
+  let r = await b.ack('task:open', { stationId: 1 });
+  check(!r.ok, 'the seeker cannot open tasks');
+  await a.teleport(20, 0, 26.5, 0);
+  r = await a.ack('task:open', { stationId: 1 });
+  check(!r.ok && /far/i.test(r.error), 'opening a task from far away is refused');
+  r = await a.ack('task:submit', { answer: 1 });
+  check(r.result === 'error', 'submitting without an open task is refused');
+
+  // exit stays shut before enough tasks
+  await a.teleport(1.8, 0, 5, Math.PI / 2);
+  await a.walkTo(0.45, 5);
+  await sleep(150);
+  check(a.lobby.players.find((p) => p.id === a.id).status === 'alive', 'walking into the exit before enough tasks does nothing');
+
+  for (let i = 0; i < 6; i++) {
+    const def = MAP.stations[i];
+    const station = a.round.stations[i];
+    const spot = freeSpotNear(def);
+    await a.teleport(spot[0], spot[1], spot[2], 0);
+    let o = await a.ack('task:open', { stationId: def.id });
+    if (!check(o.ok && o.type === TYPES[i], `opened ${TYPES[i]} at the ${def.room}`)) continue;
+    // a moving player with a task open is frozen
+    if (i === 0) {
+      const c0 = a.corrections;
+      a.move(spot[0] + 0.3, spot[1], spot[2]); await sleep(150);
+      check(a.corrections > c0, 'players cannot move while a task is open');
+    }
+    let w = await a.ack('task:submit', { answer: wrong(o.type, o.data, station) });
+    check(w.result === 'wrong', `${TYPES[i]}: wrong answer rejected`);
+    let data = w.data ?? o.data;
+    if (o.type === 'math') check(data.index === 0, 'math: wrong answer resets progress with new questions');
+    let res;
+    for (let step = 0; step < 4; step++) {
+      res = await a.ack('task:submit', { answer: solve(o.type, data, station) });
+      if (res.result !== 'progress') break;
+      data = res.data;
+    }
+    check(res.result === 'complete', `${TYPES[i]}: right answer accepted`);
+    await sleep(80);
+    check(a.you?.tasksDone.includes(def.id), `${TYPES[i]}: station marked done for this player`);
+  }
+  r = await a.ack('task:open', { stationId: 1 });
+  check(!r.ok, 'a finished station cannot be redone');
+  check(a.you.unlocked === true, 'exit unlocks after the required number of tasks');
+  check(!b.you?.unlocked, 'the exit is not unlocked for the seeker');
+
+  // escape -> only hider escaped -> hiders win
+  const resW = b.waitFor('results');
+  await a.teleport(1.8, 0, 5, Math.PI / 2);
+  await a.walkTo(0.45, 5);
+  const results = await resW;
+  check(results && results.winner === 'hiders', `escaping wins for the hiders (${results?.reason})`);
+  check(results?.players.find((p) => p.id === a.id)?.status === 'escaped', 'results show the hider escaped');
+  a.close(); b.close();
+  await sleep(300);
+
+  // win logic with more hiders: 4 hiders need 2 escapes
+  const bots = await makeBots(5, ['H1', 'H2', 'H3', 'H4', 'Sk']);
+  for (const x of bots) await x.join();
+  const [h1, h2, h3, h4, sk] = bots;
+  await startRoundWith(bots, sk, { tasksNeeded: 1 });
+  const ru = h1.waitFor('round');
+  h1.emit('debug:forceTypes', { types: ['codelock'] });
+  await ru;
+  async function doTaskAndEscape(h) {
+    const def = MAP.stations[1];
+    const spot = freeSpotNear(def);
+    await h.teleport(spot[0], spot[1], spot[2], 0);
+    await h.ack('task:open', { stationId: def.id });
+    await h.ack('task:submit', { answer: h.round.stations[1].code });
+    await h.teleport(1.8, 0, 5, Math.PI / 2);
+    await h.walkTo(0.45, 5);
+    await sleep(100);
+  }
+  await doTaskAndEscape(h1);
+  check(!sk.results && h1.lobby.players.find((p) => p.id === h1.id).status === 'escaped', '1 of 4 escaped: round continues');
+  await toSeeking(sk);
+  await sk.teleport(20, 0, 15, 0); await h3.teleport(20, 0, 14.0, 0);
+  await sleep(700);
+  await sk.ack('catch', { yaw: 0 });
+  await sk.teleport(20, 0, 15, 0); await h4.teleport(20, 0, 14.0, 0);
+  await sleep(700);
+  await sk.ack('catch', { yaw: 0 });
+  await sleep(100);
+  check(!sk.results, '1 escaped, 2 caught, 1 alive: still possible, round continues');
+  const fin = sk.waitFor('results');
+  await doTaskAndEscape(h2);
+  const fr = await fin;
+  check(fr && fr.winner === 'hiders', `2 of 4 escaped (half): hiders win (${fr?.reason})`);
+  for (const x of bots) x.close();
+  await sleep(300);
+}
+
 // ------------------------------------------------------------------ run
-const PHASES = { 1: phase1, 2: phase2, 3: phase3 };
+const PHASES = { 1: phase1, 2: phase2, 3: phase3, 4: phase4 };
 const pick = process.argv.slice(2).map(Number).filter((n) => PHASES[n]);
 (async () => {
   try {

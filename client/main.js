@@ -108,7 +108,11 @@ socket.on('snap', (snap) => {
   G.timeLeft = snap.timeLeft;
   if (snap.phase !== G.phase) { G.phase = snap.phase; refreshScreens(); }
   const me = snap.players.find((p) => p.id === G.myId);
-  if (me && me.st !== G.myStatus) { G.myStatus = me.st; refreshScreens(); }
+  if (me && me.st !== G.myStatus) {
+    G.myStatus = me.st;
+    if (me.st !== 'alive' && me.st !== 'lobby') closeTask(false);
+    refreshScreens();
+  }
 });
 socket.on('round', (r) => {
   const prevPhase = G.round?.phase;
@@ -202,11 +206,11 @@ document.getElementById('game').addEventListener('mousedown', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
-  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
   if (G.taskOpen) {
     if (e.code === 'Escape') closeTask(true);
     return;
   }
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
   keys[e.code] = true;
   if (controls.isLocked && (e.ctrlKey || e.code === 'Space' || e.code.startsWith('Arrow'))) e.preventDefault();
   if (e.code === 'KeyE' && controls.isLocked) interact();
@@ -228,11 +232,11 @@ function tryCatch() {
 }
 
 function nearestStation() {
+  // same rule as the server: horizontal distance within TASK_DISTANCE, same floor
   let best = null, bd = Infinity;
-  const eye = [local.s.x, local.s.y + local.eye, local.s.z];
   for (const st of MAP.stations) {
-    const c = [st.pos[0], st.pos[1] + 0.8, st.pos[2]];
-    const d = Math.hypot(eye[0] - c[0], (eye[1] - c[1]) * 0.5, eye[2] - c[2]);
+    if (Math.abs(local.s.y - st.pos[1]) >= 1.0) continue;
+    const d = Math.hypot(local.s.x - st.pos[0], local.s.z - st.pos[2]);
     if (d < bd) { bd = d; best = st; }
   }
   return bd <= CONFIG.TASK_DISTANCE - 0.05 ? best : null;
