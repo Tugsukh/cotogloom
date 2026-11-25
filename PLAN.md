@@ -32,7 +32,7 @@ README.md
 - [x] 1. Server + lobby + players walking in a test room, synced (bots: join, ready, host start)
 - [x] 2. Full map, collision, stairs, crouch-under-table, lighting (screenshots)
 - [x] 3. Roles, hiding/seeking, catching, timer, win/results, play again (bots: catch LOS/range, win logic)
-- [ ] 4. Task stations, 6 tasks, exit door (bots: every task rejects wrong / accepts right; escape gating)
+- [ ] 4. (IN PROGRESS: questions.json written; server tasks, client task UIs, exit door next) Task stations, 6 tasks, exit door (bots: every task rejects wrong / accepts right; escape gating)
 - [ ] 5. Sound, HUD polish, spectator mode, disconnect handling
 - [ ] Finish: README, full test run, cloudflared tunnel
 

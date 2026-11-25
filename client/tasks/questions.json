@@ -1,0 +1,482 @@
+[
+ {
+  "q": "What is the capital of France?",
+  "choices": [
+   "Paris",
+   "Lyon",
+   "Marseille",
+   "Nice"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "How many continents are there on Earth?",
+  "choices": [
+   "7",
+   "5",
+   "6",
+   "8"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Which planet is known as the Red Planet?",
+  "choices": [
+   "Mars",
+   "Venus",
+   "Jupiter",
+   "Mercury"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "What is the largest ocean on Earth?",
+  "choices": [
+   "Pacific",
+   "Atlantic",
+   "Indian",
+   "Arctic"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "How many legs does a spider have?",
+  "choices": [
+   "8",
+   "6",
+   "10",
+   "12"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "What gas do plants absorb from the air?",
+  "choices": [
+   "Carbon dioxide",
+   "Oxygen",
+   "Nitrogen",
+   "Helium"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Which is the longest river in Africa?",
+  "choices": [
+   "Nile",
+   "Congo",
+   "Niger",
+   "Zambezi"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "What is the freezing point of water in °C?",
+  "choices": [
+   "0",
+   "32",
+   "-10",
+   "100"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Who painted the Mona Lisa?",
+  "choices": [
+   "Leonardo da Vinci",
+   "Michelangelo",
+   "Raphael",
+   "Van Gogh"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "What is the hardest natural substance?",
+  "choices": [
+   "Diamond",
+   "Gold",
+   "Iron",
+   "Quartz"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "How many days are in a leap year?",
+  "choices": [
+   "366",
+   "365",
+   "364",
+   "360"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Which animal is the largest mammal?",
+  "choices": [
+   "Blue whale",
+   "African elephant",
+   "Giraffe",
+   "Hippopotamus"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "What is the chemical symbol for gold?",
+  "choices": [
+   "Au",
+   "Ag",
+   "Go",
+   "Gd"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Which country is home to the kangaroo?",
+  "choices": [
+   "Australia",
+   "South Africa",
+   "Brazil",
+   "India"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "How many sides does a hexagon have?",
+  "choices": [
+   "6",
+   "5",
+   "7",
+   "8"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "What is the tallest mountain in the world?",
+  "choices": [
+   "Mount Everest",
+   "K2",
+   "Kilimanjaro",
+   "Mont Blanc"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Which instrument has 88 keys?",
+  "choices": [
+   "Piano",
+   "Organ",
+   "Accordion",
+   "Harp"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "What colour do you get by mixing blue and yellow?",
+  "choices": [
+   "Green",
+   "Purple",
+   "Orange",
+   "Brown"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Which planet is closest to the Sun?",
+  "choices": [
+   "Mercury",
+   "Venus",
+   "Earth",
+   "Mars"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "What is the largest desert in the world (hot or cold)?",
+  "choices": [
+   "Antarctica",
+   "Sahara",
+   "Gobi",
+   "Kalahari"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "How many minutes are in an hour?",
+  "choices": [
+   "60",
+   "100",
+   "30",
+   "90"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "What language has the most native speakers?",
+  "choices": [
+   "Mandarin Chinese",
+   "English",
+   "Spanish",
+   "Hindi"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Which organ pumps blood through the body?",
+  "choices": [
+   "Heart",
+   "Lungs",
+   "Liver",
+   "Kidneys"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "What is the capital of Japan?",
+  "choices": [
+   "Tokyo",
+   "Osaka",
+   "Kyoto",
+   "Seoul"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Which bird is a symbol of peace?",
+  "choices": [
+   "Dove",
+   "Eagle",
+   "Owl",
+   "Crow"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "How many players are on a football (soccer) team on the field?",
+  "choices": [
+   "11",
+   "10",
+   "9",
+   "12"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "What is H2O commonly called?",
+  "choices": [
+   "Water",
+   "Salt",
+   "Hydrogen peroxide",
+   "Ozone"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Which is the smallest prime number?",
+  "choices": [
+   "2",
+   "1",
+   "3",
+   "0"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Which country gifted the Statue of Liberty to the USA?",
+  "choices": [
+   "France",
+   "United Kingdom",
+   "Spain",
+   "Italy"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "What do bees make?",
+  "choices": [
+   "Honey",
+   "Silk",
+   "Wax paper",
+   "Milk"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "What is the capital of Mongolia?",
+  "choices": [
+   "Ulaanbaatar",
+   "Erdenet",
+   "Darkhan",
+   "Astana"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "How many hours are in a day?",
+  "choices": [
+   "24",
+   "12",
+   "36",
+   "48"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Which shape has three sides?",
+  "choices": [
+   "Triangle",
+   "Square",
+   "Circle",
+   "Pentagon"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "What is the largest planet in our solar system?",
+  "choices": [
+   "Jupiter",
+   "Saturn",
+   "Neptune",
+   "Earth"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Who wrote 'Romeo and Juliet'?",
+  "choices": [
+   "William Shakespeare",
+   "Charles Dickens",
+   "Jane Austen",
+   "Mark Twain"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "What is the main ingredient of guacamole?",
+  "choices": [
+   "Avocado",
+   "Tomato",
+   "Pea",
+   "Cucumber"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Which metal is liquid at room temperature?",
+  "choices": [
+   "Mercury",
+   "Lead",
+   "Aluminium",
+   "Tin"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "How many strings does a standard guitar have?",
+  "choices": [
+   "6",
+   "4",
+   "5",
+   "7"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Which continent is Egypt in?",
+  "choices": [
+   "Africa",
+   "Asia",
+   "Europe",
+   "South America"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "What is the boiling point of water at sea level in °C?",
+  "choices": [
+   "100",
+   "90",
+   "120",
+   "212"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Which animal is known as the 'King of the Jungle'?",
+  "choices": [
+   "Lion",
+   "Tiger",
+   "Elephant",
+   "Gorilla"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "What is 12 × 12?",
+  "choices": [
+   "144",
+   "124",
+   "132",
+   "154"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "What is the closest star to Earth?",
+  "choices": [
+   "The Sun",
+   "Sirius",
+   "Proxima Centauri",
+   "Polaris"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Which sense do you use your nose for?",
+  "choices": [
+   "Smell",
+   "Taste",
+   "Hearing",
+   "Touch"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "What is the capital of Italy?",
+  "choices": [
+   "Rome",
+   "Milan",
+   "Venice",
+   "Naples"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "How many colours are in a rainbow?",
+  "choices": [
+   "7",
+   "6",
+   "5",
+   "8"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Which vitamin do we get from sunlight?",
+  "choices": [
+   "Vitamin D",
+   "Vitamin C",
+   "Vitamin A",
+   "Vitamin B12"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "What is the currency of the United Kingdom?",
+  "choices": [
+   "Pound sterling",
+   "Euro",
+   "Dollar",
+   "Franc"
+  ],
+  "answer": 0
+ }
+]
