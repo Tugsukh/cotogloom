@@ -28,7 +28,17 @@ Cotogloom server listening on port 3000
 Open the LAN link on every computer on the same Wi-Fi. The browser connects back to whatever address served the page,
 so nothing is hard-coded.
 
-### Put it online (players outside your network)
+### Deploy permanently on Render
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/tugsukh/cotogloom)
+
+The repo includes a [`render.yaml`](render.yaml) Blueprint: one free Node web service (`npm ci --omit=dev`, then `npm start`,
+health check at `/healthz`). Click the button (or in the Render dashboard: **New → Blueprint**, pick this repo), approve,
+and after the first build you get a permanent `https://cotogloom-xxxx.onrender.com` link. Socket.io WebSockets work on Render.
+Notes: on the free plan the service sleeps after ~15 minutes without visitors (the first visit then takes ~30–60 s to
+wake it up) and a restart clears the lobby. Keep it to a single instance, because game state is held in memory.
+
+### Put it online temporarily (players outside your network)
 
 With [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) installed and `npm start` running:
 
