@@ -34,7 +34,7 @@ README.md
 - [x] 3. Roles, hiding/seeking, catching, timer, win/results, play again (bots: catch LOS/range, win logic)
 - [x] 4. Task stations, 6 tasks, exit door
 - [x] 5. Sound, HUD polish, spectator mode, disconnect handling
-- [ ] Finish: README, full test run, cloudflared tunnel
+- [x] Finish: README, full test run (119 bot checks + 3 browser checks green). cloudflared installed but blocked by the cloud sandbox network (see README "Put it online")
 
 Verification after every phase: `npm start` boots cleanly, `node tests/bots.mjs` passes,
 `node tests/screenshot.cjs` shows no console errors + screenshot reviewed, then git commit.
