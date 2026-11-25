@@ -1,0 +1,21 @@
+{
+  "name": "cotogloom",
+  "version": "1.0.0",
+  "description": "Multiplayer 3D first-person hide-and-seek in the browser",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "node tests/bots.mjs",
+    "screenshot": "node tests/screenshot.cjs"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1",
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.1"
+  }
+}
