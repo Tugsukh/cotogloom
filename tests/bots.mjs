@@ -559,8 +559,80 @@ async function phase4() {
   await sleep(300);
 }
 
+// ================================================================== PHASE 5
+async function phase5() {
+  console.log('\nPhase 5 — disconnects, late joiners, spectators');
+  const [a, b, c] = await makeBots(3);
+  await a.join(); await b.join(); await c.join();
+  await startRoundWith([a, b, c], c, { hideTime: 60 });
+
+  // late joiner during a round -> spectator until the next round
+  const [d] = await makeBots(1, ['Dana']);
+  const rWait = d.waitFor('round');
+  await d.join();
+  const dr = await rWait;
+  await sleep(100);
+  check(dr && dr.phase === 'hiding', 'late joiner receives the running round');
+  check(d.lobby.players.find((p) => p.id === d.id).status === 'spectator', 'late joiner is a spectator');
+  const dc = d.corrections;
+  d.move(d.pos[0] + 0.3, d.pos[1], d.pos[2]); await sleep(150);
+  check(d.corrections > dc, 'spectators cannot move');
+  const dt = await d.ack('task:open', { stationId: 1 });
+  check(!dt.ok, 'spectators cannot do tasks');
+
+  // hider disconnects while a task is open -> removed, round continues
+  const def = MAP.stations[3];
+  await b.teleport(def.pos[0] + 0.8, def.pos[1], def.pos[2], 0);
+  const op = await b.ack('task:open', { stationId: def.id });
+  check(op.ok, 'hider opened a task');
+  b.close();
+  await sleep(250);
+  check(!a.results && a.lobby.players.length === 3 && !a.lobby.players.some((p) => p.name === 'Bob'), 'hider leaving is removed; round continues with one hider left');
+
+  // seeker leaves -> round ends, everyone (incl. spectator) gets results
+  const resW = d.waitFor('results');
+  c.close();
+  const res = await resW;
+  check(res && res.reason === 'Seeker left' && res.winner === 'hiders', 'seeker leaving ends the round ("Seeker left")');
+
+  // joining during the results screen shows the results
+  const e = new Bot('Eli', '#f58231');
+  await e.connect();
+  const eRes = e.waitFor('results');
+  await e.join();
+  check(!!(await eRes), 'player joining on the results screen receives the results');
+
+  // play again: spectators join in, seeker = first player because the old seeker left
+  const nr = d.waitFor('round', (r) => r.phase === 'hiding');
+  a.emit('playAgain');
+  const round = await nr;
+  await sleep(100);
+  check(round && round.seekerId === a.id, 'seeker left last round: play again picks the first player');
+  const pd = d.lobby.players.find((p) => p.id === d.id);
+  check(pd.role === 'hider' && pd.status === 'alive', 'former spectators play in the next round');
+
+  // back to lobby
+  const toLobby = d.waitFor('lobby', (l) => l.phase === 'ended');
+  e.emit('debug:setTime', { seconds: 0 }); // hiding -> seeking
+  await sleep(200);
+  e.emit('debug:setTime', { seconds: 0 }); // seeking -> time up
+  await toLobby;
+  a.emit('backToLobby');
+  await sleep(200);
+  check(d.lobby.phase === 'lobby' && d.lobby.players.every((p) => p.status === 'lobby' && !p.ready), 'host returns everyone to the lobby (ready reset)');
+
+  // everyone leaves -> fresh lobby for the next visitor
+  for (const x of [a, d, e]) x.close();
+  await sleep(300);
+  const [f] = await makeBots(1, ['Fay']);
+  await f.join();
+  check(f.lobby.phase === 'lobby' && f.lobby.hostId === f.id && f.lobby.players.length === 1, 'empty server resets to a fresh lobby');
+  f.close();
+  await sleep(200);
+}
+
 // ------------------------------------------------------------------ run
-const PHASES = { 1: phase1, 2: phase2, 3: phase3, 4: phase4 };
+const PHASES = { 1: phase1, 2: phase2, 3: phase3, 4: phase4, 5: phase5 };
 const pick = process.argv.slice(2).map(Number).filter((n) => PHASES[n]);
 (async () => {
   try {

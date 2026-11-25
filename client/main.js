@@ -31,6 +31,7 @@ const remote = new RemotePlayers(scene);
 const local = new LocalPlayer(camera);
 const controls = new PointerLockControls(camera, renderer.domElement);
 const audio = new Audio();
+window.__audio = audio;
 
 // Personal lights carried by the local player (only this client renders them).
 const hiderLight = new THREE.PointLight('#ffd9a0', 0, CONFIG.HIDER_LIGHT_DISTANCE, 1.5);
@@ -94,7 +95,7 @@ G.socket = socket;
 socket.on('hello', (d) => { G.myId = d.id; G.testMode = d.testMode; });
 socket.on('lobby', (s) => {
   G.lobby = s;
-  if (!G.joined) G.phase = s.phase;
+  if (!G.joined || s.phase === 'lobby') G.phase = s.phase;
   remote.setInfo(s.players);
   const me = s.players.find((p) => p.id === G.myId);
   if (me && G.joined) { G.myStatus = me.status; G.myRole = me.role; }
@@ -380,7 +381,7 @@ function updateHud() {
   if (seekerFrozen()) document.getElementById('blackoutTimer').textContent = Math.ceil(G.timeLeft);
   const seeker = G.myRole === 'seeker';
   const d = {
-    role: seeker ? 'seeker' : 'hider',
+    role: G.myStatus !== 'alive' ? '' : seeker ? 'seeker' : 'hider',
     roleText: G.myStatus === 'spectator' ? 'SPECTATOR' : seeker ? 'SEEKER' : G.myStatus === 'escaped' ? 'ESCAPED' : G.myStatus === 'caught' ? 'CAUGHT' : 'HIDER',
     timer: (G.phase === 'hiding' ? 'Hiding ' : '') + fmtTime(G.timeLeft),
     timerLow: G.phase === 'seeking' && G.timeLeft < 30,
@@ -417,7 +418,7 @@ function updateAudio(dt, now) {
   if (G.joined && (G.myStatus === 'alive' || G.myStatus === 'lobby')) {
     const stride = local.crouched ? CONFIG.STRIDE_CROUCH : local.sprinting ? CONFIG.STRIDE_SPRINT : CONFIG.STRIDE_WALK;
     if (local.moved >= stride) {
-      local.moved = 0;
+      local.moved = Math.min(local.moved - stride, stride);
       const v = local.crouched ? CONFIG.FOOTSTEP_VOL_CROUCH : local.sprinting ? CONFIG.FOOTSTEP_VOL_SPRINT : CONFIG.FOOTSTEP_VOL_WALK;
       audio.footstep(0, 0, v * CONFIG.LOCAL_FOOTSTEP_VOL);
     }
@@ -428,7 +429,7 @@ function updateAudio(dt, now) {
     if (!s || av.id === G.myId || !(s.st === 'alive' || s.st === 'lobby')) { av.stepAcc = 0; continue; }
     const stride = s.c ? CONFIG.STRIDE_CROUCH : s.s ? CONFIG.STRIDE_SPRINT : CONFIG.STRIDE_WALK;
     if (av.stepAcc >= stride) {
-      av.stepAcc = 0;
+      av.stepAcc = Math.min(av.stepAcc - stride, stride);
       const dx = s.x - lp.x, dz = s.z - lp.z, dy = s.y - lp.y;
       const dist = Math.hypot(dx, dy, dz);
       if (dist > CONFIG.FOOTSTEP_RANGE) continue;

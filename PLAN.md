@@ -33,7 +33,7 @@ README.md
 - [x] 2. Full map, collision, stairs, crouch-under-table, lighting (screenshots)
 - [x] 3. Roles, hiding/seeking, catching, timer, win/results, play again (bots: catch LOS/range, win logic)
 - [x] 4. Task stations, 6 tasks, exit door
-- [ ] 5. Sound, HUD polish, spectator mode, disconnect handling
+- [x] 5. Sound, HUD polish, spectator mode, disconnect handling
 - [ ] Finish: README, full test run, cloudflared tunnel
 
 Verification after every phase: `npm start` boots cleanly, `node tests/bots.mjs` passes,

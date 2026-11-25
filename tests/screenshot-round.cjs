@@ -33,7 +33,7 @@ function makeBot(name) {
   await new Promise((r) => server.stdout.on('data', (d) => String(d).includes('listening') && r()));
   const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'] });
   const errors = [];
-  let bot;
+  let bot, bot2;
   try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
     page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
@@ -43,15 +43,18 @@ function makeBot(name) {
     await page.fill('#nameInput', 'Viewer');
     await page.click('#joinBtn');
     await sleep(400);
+    bot2 = makeBot('Hidey');
+    await bot2.join();
     bot = makeBot('Seeky');
     await bot.join();
     await sleep(300);
     const myId = await page.evaluate(() => window.__game.myId);
     // host (page) picks the bot as seeker, everyone ready, start
-    await page.selectOption('#setSeeker', await page.evaluate(() => window.__game.lobby.players[1].id));
+    await page.selectOption('#setSeeker', await page.evaluate(() => window.__game.lobby.players[2].id));
     await page.fill('#setHide', '20'); await page.dispatchEvent('#setHide', 'change');
     await page.click('#readyBtn');
     bot.s.emit('ready', true);
+    bot2.s.emit('ready', true);
     await sleep(400);
     await shot(page, 'lobby2');
     await page.click('#startBtn');
@@ -63,9 +66,15 @@ function makeBot(name) {
     await shot(page, 'hider-hiding');
     if (await page.evaluate(() => window.__game.phase) === 'hiding') bot.s.emit('debug:setTime', { seconds: 0 });
     await sleep(600);
-    // seeker walks up and shines the flashlight at the hider
-    bot.tp(21.5, 0, 14.5, 0); await sleep(300);
-    bot.look(-0.6, -0.1);
+    // seeker walks around near the hider (footsteps + heartbeat), then shines the flashlight at them
+    bot2.tp(26, 0, 20, 0);
+    bot.tp(23, 0, 13, 0); await sleep(300);
+    for (let k = 0; k < 40; k++) {
+      bot.pos = [23 - k * 0.12, 0, 13 + k * 0.04];
+      bot.s.emit('move', { x: bot.pos[0], y: 0, z: bot.pos[2], yaw: -0.6, pitch: -0.1, sprint: true, seq: bot.seq });
+      await sleep(50);
+    }
+    await sleep(400);
     await page.evaluate(() => window.__debug.view(20, 0, 17.0, 0.15, 0.05));
     await sleep(1200);
     await shot(page, 'hider-seeking');
@@ -74,6 +83,21 @@ function makeBot(name) {
     bot.tp(20, 0, 14.6, Math.PI); await sleep(400);
     const res = await new Promise((r) => bot.s.emit('catch', { yaw: Math.PI }, r));
     console.log('catch result', res);
+    await sleep(1200);
+    // caught but Hidey is still alive -> spectator mode
+    const spec1 = await page.textContent('#spectate');
+    await shot(page, 'spectate');
+    await page.keyboard.press('ArrowRight');
+    await sleep(300);
+    const spec2 = await page.textContent('#spectate');
+    console.log('spectate:', JSON.stringify(spec1), '->', JSON.stringify(spec2));
+    const stats = await page.evaluate(() => window.__audio.stats);
+    console.log('audio stats:', JSON.stringify(stats));
+    if (!/Spectating/.test(spec1) || spec1 === spec2) errors.push('spectator cycling failed');
+    if (!(stats.footsteps > 0 && stats.heartbeats > 0)) errors.push('no footsteps/heartbeat played');
+    // catch Hidey -> round over
+    bot2.tp(20, 0, 14.0, 0); bot.tp(20, 0, 15, 0); await sleep(900);
+    await new Promise((r) => bot.s.emit('catch', { yaw: 0 }, r));
     await sleep(1500);
     await shot(page, 'end');
     const endTitle = await page.textContent('#endTitle');
@@ -95,7 +119,7 @@ function makeBot(name) {
     if (!(res && res.ok && /SEEKER/.test(endTitle) && blackout)) errors.push('round flow assertions failed');
     void myId;
   } finally {
-    bot?.s.close();
+    bot?.s.close(); bot2?.s.close();
     await browser.close();
     server.kill('SIGTERM');
   }

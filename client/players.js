@@ -126,7 +126,7 @@ export class RemotePlayers {
       // footstep bookkeeping for audio
       if (av.lastPos && inWorld) {
         const d = Math.hypot(s.x - av.lastPos[0], s.z - av.lastPos[2]);
-        if (d < 2) av.stepAcc += d;
+        if (d < 3.5) av.stepAcc += d; // ignore teleports
       }
       av.lastPos = [s.x, s.y, s.z];
 

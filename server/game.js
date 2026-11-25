@@ -111,7 +111,8 @@ export class Game {
     this.order.push(socket.id);
     reply({ ok: true, id: socket.id, color, name });
     socket.emit('teleport', { pos: p.pos, yaw: p.yaw, seq: p.tpSeq });
-    if (inRound) this.sendRound(p);
+    if (inRound) { this.sendRound(p); this.sendYou(p); }
+    if (this.phase === 'ended' && this.results) socket.emit('results', this.results);
     this.broadcastLobby();
   }
 

@@ -1,6 +1,6 @@
 // Procedural Web Audio: footsteps (filtered noise, stereo-panned by position), heartbeat, chimes.
 export class Audio {
-  constructor() { this.ctx = null; this.ready = false; }
+  constructor() { this.ctx = null; this.ready = false; this.stats = { footsteps: 0, heartbeats: 0, chimes: 0 }; }
 
   init() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
@@ -21,6 +21,7 @@ export class Audio {
   /** pan -1..1 (left..right), dist in metres (muffles far steps), vol 0..1 */
   footstep(pan, dist, vol) {
     if (!this.ready || vol <= 0.002) return;
+    this.stats.footsteps++;
     const c = this.ctx, t = c.currentTime;
     const src = c.createBufferSource();
     src.buffer = this.noise;
@@ -58,6 +59,7 @@ export class Audio {
 
   heartbeat(intensity) {
     if (!this.ready) return;
+    this.stats.heartbeats++;
     const t = this.ctx.currentTime;
     this.thump(t, 62, 0.9 * intensity);
     this.thump(t + 0.17, 55, 0.65 * intensity);
@@ -77,6 +79,7 @@ export class Audio {
 
   chime(kind) {
     if (!this.ready) return;
+    this.stats.chimes++;
     const seqs = {
       task: [[660, 0], [880, 0.09], [1320, 0.18]],
       unlock: [[523, 0], [659, 0.12], [784, 0.24], [1046, 0.36]],
