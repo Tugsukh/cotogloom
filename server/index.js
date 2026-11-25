@@ -13,6 +13,7 @@ const testMode = process.env.HS_TEST === '1';
 
 const app = express();
 app.disable('x-powered-by');
+app.get('/healthz', (_req, res) => res.json({ ok: true, players: game.players.size, phase: game.phase }));
 app.use('/vendor/three', express.static(path.join(root, 'node_modules/three')));
 app.use('/shared', express.static(path.join(root, 'shared')));
 app.use('/', express.static(path.join(root, 'client')));
